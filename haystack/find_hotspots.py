@@ -5,10 +5,11 @@ import subprocess as sb
 import numpy as np
 import pandas as pd
 import argparse
-#from pybedtools import BedTool
 import multiprocessing
 import glob
 from haystack_common import determine_path, check_file, check_required_packages, initialize_genome, HAYSTACK_VERSION
+from bioutilities import smooth
+
 
 import logging
 logging.basicConfig(level=logging.INFO,
@@ -22,7 +23,7 @@ debug = logging.debug
 info = logging.info
 
 do_not_recompute = None
-keep_intermediate_files= None
+keep_intermediate_files = None
 
 
 def quantile_normalization(A):
@@ -30,13 +31,6 @@ def quantile_normalization(A):
     I = np.argsort(A, axis=0)
     AA[I, np.arange(A.shape[1])] = np.mean(A[I, np.arange(A.shape[1])], axis=1)[:, np.newaxis]
     return AA
-
-def smooth(x, window_len=200):
-    s = np.r_[x[window_len - 1:0:-1], x, x[-1:-window_len:-1]]
-    w = np.hanning(window_len)
-    y = np.convolve(w / w.sum(), s, mode='valid')
-    return y[int(window_len / 2):-int(window_len / 2) + 1]
-
 
 # write the IGV session file
 def rem_base_path(path, base_path):
@@ -156,7 +150,6 @@ def get_args():
 
 
 def get_data_filepaths(samples_filename_or_bam_folder, input_is_bigwig):
-    # check folder or sample filename
     if not os.path.exists(samples_filename_or_bam_folder):
         error("The file or folder %s doesn't exist. Exiting." %
               samples_filename_or_bam_folder)
@@ -168,7 +161,7 @@ def get_data_filepaths(samples_filename_or_bam_folder, input_is_bigwig):
             for line in infile:
                 if not line.strip():
                     continue
-                if line.startswith('#'): # skip optional header line
+                if line.startswith('#'):
                     info('Skipping header/comment line:%s' % line)
                     continue
                 fields = line.strip().split()
@@ -179,9 +172,7 @@ def get_data_filepaths(samples_filename_or_bam_folder, input_is_bigwig):
                 else:
                     error('The samples file format is wrong!')
                     sys.exit(1)
-        # dir_path = os.path.dirname(os.path.realpath(samples_filename_or_bam_folder))
-        # data_filenames = [os.path.join(dir_path, filename)
-        #                     for filename in data_filenames]
+
     else:
         if input_is_bigwig:
             extension_to_check = '.bw'
@@ -641,7 +632,7 @@ def find_hpr_coordinates(df_chip,
     N_POINTS = len(scores)
     x = np.linspace(0, 1, N_POINTS)
     y = sorted((scores - min_s) / (max_s - min_s))
-    m = smooth((np.diff(y) / np.diff(x)), 50)
+    m = smooth((np.diff(y) / np.diff(x)), 50, window='hanning') # why 50?
     m = m - 1
     m[m <= 0] = np.inf
     m[:int(len(m) * (1 - max_regions_percentage))] = np.inf
@@ -906,19 +897,9 @@ def create_igv_track_file(hpr_iod_scores,
 
 def main(input_args=None):
 
-    # input_args = ["/home/rfarouni/Documents/haystack_bio/haystack/haystack_data/test_data/samples_names_hotspots.txt",
-    #               "hg19",
-    #               '--blacklist',
-    #               "hg19",
-    #               '--output_directory',
-    #               "/home/rfarouni/haystack_test_output/HAYSTACK_PIPELINE_RESULTS2",
-    #               "--chrom_exclude",
-    #               'chr(?!21)']
-    # input_args.append('--keep_intermediate_files')
-
-    print '\n[H A Y S T A C K   H O T S P O T]'
+    print('\n[H A Y S T A C K   H O T S P O T]')
     print('\n-SELECTION OF VARIABLE REGIONS-\n')
-    print 'Version %s\n' % HAYSTACK_VERSION
+    print('Version %s\n' % HAYSTACK_VERSION)
 
     # step 1
     check_required_packages()

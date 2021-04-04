@@ -1,4 +1,3 @@
-
 from haystack_common import initialize_genome, HAYSTACK_VERSION
 import argparse
 import sys
@@ -14,8 +13,8 @@ def get_args_download_genome():
 
 
 def main(input_args=None):
-    print '\n[H A Y S T A C K   G E N O M E   D O W L O A D E R]\n'
-    print 'Version %s\n' % HAYSTACK_VERSION
+    print('\n[H A Y S T A C K   G E N O M E   D O W L O A D E R]\n')
+    print('Version %s\n' % HAYSTACK_VERSION)
     parser = get_args_download_genome()
     args = parser.parse_args(input_args)
     initialize_genome(args.name)

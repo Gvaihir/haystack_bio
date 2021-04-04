@@ -1,4 +1,5 @@
-# python modules
+import numpy as np
+import logging
 import multiprocessing as mp
 from functools import partial
 import uuid
@@ -11,19 +12,20 @@ import ntpath
 import shutil
 from collections import defaultdict
 import codecs
+from Coordinate import Coordinate
+from Sequence import Sequence
+from Fimo import Fimo
+
+from bioutilities import smooth
 
 try:
     import cPickle as cp
 except:
     import pickle as cp
 
-# commmon functions
 from haystack_common import determine_path, which, check_file, initialize_genome, HAYSTACK_VERSION
 
-# dependencies
-from bioutilities import  Coordinate, Sequence, Fimo
-import numpy as np
-import logging
+
 
 logging.basicConfig(level=logging.INFO,
                     format='%(levelname)-5s @ %(asctime)s:\n\t %(message)s \n',
@@ -41,7 +43,6 @@ info = logging.info
 np.seterr(divide='ignore')
 np.seterr(invalid='ignore')
 from scipy import stats
-from scipy.misc import factorial
 import matplotlib as mpl
 
 mpl.use('Agg')
@@ -49,36 +50,16 @@ import matplotlib.pyplot as pl
 
 pl.rc('font', **{'size': 18})
 from jinja2 import Environment, FileSystemLoader
-# external
 from external import estimate_qvalues, generate_weblogo
 
 
-####SUPPORT CLASSES AND FUNCTIONS#################################################################
-
-
-def smooth(x, window_len=200, window='hanning'):
-    if not window in ['flat', 'hanning', 'hamming', 'bartlett', 'blackman']:
-        raise ValueError, "Window is on of 'flat', 'hanning', 'hamming', 'bartlett', 'blackman'"
-
-    s = np.r_[x[window_len - 1:0:-1], x, x[-1:-window_len:-1]]
-    if window == 'flat':  # moving average
-        w = np.ones(window_len, 'd')
-    else:
-        w = eval('np.' + window + '(window_len)')
-    y = np.convolve(w / w.sum(), s, mode='valid')
-    return y[window_len / 2:-window_len / 2 + 1]
-
-
+#SUPPORT CLASSES AND FUNCTIONS
 def generate_motif_profile(profile_target, profile_bg, motif_id, output_filename, smooth_size=200, window_size=5000):
-    s_smoothed = smooth(profile_target, smooth_size)
-    # bg_mean=profile_bg.mean()
-    # fc_s_bg=s_smoothed/bg_mean
+    s_smoothed = smooth(profile_target, smooth_size, window='hanning')
 
-    #
-    bg_smoothed = smooth(profile_bg, smooth_size)
+    bg_smoothed = smooth(profile_bg, smooth_size, window='hanning')
     fc_s_bg = (s_smoothed + 0.1) / (bg_smoothed + 0.1)
 
-    #
     fig = pl.figure(figsize=(9, 8))
     ax = fig.add_subplot(111)
     ax.plot(range(-window_size / 2, window_size / 2), fc_s_bg, '-g', linewidth=3)
@@ -92,32 +73,15 @@ def generate_motif_profile(profile_target, profile_bg, motif_id, output_filename
     pl.close()
 
 
-def combine_pvalues(x):
-    # k=x.prod()
-    k = np.exp(np.log(x).sum())
-    p = 0
-    for i in range(len(x)):
-        p += np.power(-np.log(k), i) / factorial(i)
-
-    # print k --i
-    # print p
-    return k * p
-
-
 def sample_wr(population, k):
     "Chooses k random elements (with replacement) from a population"
     n = len(population)
     _random, _int = random.random, int  # speed hack
     result = [None] * k
-    for i in xrange(k):
+    for i in range(k):
         j = _int(_random() * n)
         result[i] = population[j]
     return result
-
-
-class constant_missing_dict(dict):
-    def __missing__(self, key):
-        return 0
 
 
 def pickable_defaultdict(t=list):
@@ -210,8 +174,6 @@ def parallel_fimo_scanning(target_coords,
 
     motifs_in_sequences_matrix = np.zeros((len(target_coords), len(fimo.motif_ids)))
 
-    # num_consumers= num_consumers -2
-
     # compute motifs with fimo
     if num_consumers > 1:
 
@@ -252,63 +214,13 @@ def parallel_fimo_scanning(target_coords,
                                                                                                        target_coords[
                                                                                                            idx_seq].bpstart - 1))
             except:
-                print line
+                print(line)
 
     sb.call('rm %s* ' % os.path.join(temp_directory, prefix), shell=True)
 
     return motifs_in_sequences_matrix, motifs_profiles_in_sequences, idxs_seqs_with_motif, motif_coords_in_seqs_with_motif, fimo.motif_names, fimo.motif_ids
 
 
-def get_target_motifs_filepaths(target_motifs_filepaths_file):
-    # check folder or sample filename
-    if not os.path.exists(target_motifs_filepaths_file):
-        error("The file or folder %s doesn't exist. Exiting." %
-              target_motifs_filepaths_file)
-        sys.exit(1)
-    if os.path.isfile(target_motifs_filepaths_file):
-        specific_regions_filenames = []
-        bg_regions_filenames = []
-        sample_names = []
-        with open( target_motifs_filepaths_file) as infile:
-            for line in infile:
-                if not line.strip():
-                    continue
-
-                if line.startswith('#'):  # skip optional header line or empty lines
-                    info('Skipping header/comment line:%s' % line)
-                    continue
-
-                fields = line.strip().split()
-                n_fields = len(fields)
-
-                if n_fields == 2:
-
-                    sample_names.append(fields[0])
-                    specific_regions_filenames.append(fields[1])
-                    bg_regions_filenames.append("random_background")
-
-
-                elif n_fields == 3:
-                    sample_names.append(fields[0])
-                    specific_regions_filenames.append(fields[1])
-                    bg_regions_filenames.append(fields[2])
-
-                else:
-                    error('The samples file format is wrong!')
-                    sys.exit(1)
-
-    # check all the files before starting
-    info('Checking  files location...')
-    for specific_regions_filename in specific_regions_filenames:
-        check_file(specific_regions_filename)
-
-    if n_fields == 3:
-        # check all the files before starting
-        info('Checking  files location...')
-        for bg_regions_filename in bg_regions_filenames:
-            check_file(bg_regions_filename)
-
-    return sample_names, specific_regions_filenames, bg_regions_filenames
 
 
 def get_args_motif():
@@ -348,7 +260,7 @@ def get_args_motif():
                         action='store_true')
     parser.add_argument('--temp_directory', help='Directory to store temporary files  (default: /tmp)', default='/tmp')
     parser.add_argument('--no_random_sampling_target',
-                        help='Select the best --n_target_coordinates using the score column from the target file instead of randomly select them',
+                        help='\Select the best --n_target_coordinates using the score column from the target file instead of randomly select them',
                         action='store_true')
     parser.add_argument('--name', help='Define a custom output filename for the report', default='')
     parser.add_argument('--internal_window_length', type=int,
@@ -378,12 +290,11 @@ def get_args_motif():
 
 
 
-###############################################################################
 
 def main(input_args=None):
-    print '\n[H A Y S T A C K   M O T I F S]'
+    print('\n[H A Y S T A C K   M O T I F S]')
     print('\n-MOTIF ENRICHMENT ANALYSIS- [Luca Pinello - lpinello@jimmy.harvard.edu]\n')
-    print 'Version %s\n' % HAYSTACK_VERSION
+    print('Version %s\n' % HAYSTACK_VERSION)
 
     bootstrap = False
     ngram_correction = 'g'

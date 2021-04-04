@@ -210,7 +210,7 @@ def check_md5sum(genome_filename, genome_name):
 
 def initialize_genome(genome_name):
 
-    from bioutilities import Genome_2bit
+    from Genome2Bit import Genome2Bit
     import urllib
 
     info('Initializing Genome:%s' % genome_name)
@@ -224,7 +224,7 @@ def initialize_genome(genome_name):
     if os.path.exists(genome_filename):
 
         try:
-            Genome_2bit(genome_filename, verbose=True)
+            Genome2Bit(genome_filename, verbose=True)
 
             md5_check_flag = check_md5sum(genome_filename, genome_name)
 
@@ -251,13 +251,13 @@ def initialize_genome(genome_name):
                                    data=None)
 
             info('Downloaded %s in %s:' % (urlpath, genome_filename))
-        except IOError, e:
+        except IOError as e:
                     error("Can't retrieve %r to %r: %s" % (urlpath, genome_filename, e))
                     info('Sorry I need the genome file to perform the analysis. Exiting...')
                     sys.exit(1)
 
     check_file(genome_filename)
-    genome = Genome_2bit(genome_filename, verbose=True)
+    genome = Genome2Bit(genome_filename, verbose=True)
 
     if not os.path.exists(chr_len_filename):
             info('Extracting chromosome lengths')
